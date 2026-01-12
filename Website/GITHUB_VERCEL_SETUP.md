@@ -62,7 +62,7 @@ git push origin main
 
 3. **Configure**
    - Framework: Vite
-   - Root Directory: `./`
+   - Root Directory: `Website`
    - Build Command: `npm run build`
    - Output Directory: `dist`
 
