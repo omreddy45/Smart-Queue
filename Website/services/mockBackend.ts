@@ -28,7 +28,7 @@ const syncRef = (path: string, storageKey: string) => {
     console.log('Firebase not configured, skipping sync for', path);
     return;
   }
-  
+
   try {
     const dbRef = ref(db, path);
     onValue(dbRef, (snapshot) => {
@@ -133,10 +133,12 @@ export const BackendService = {
     localStorage.setItem(STORAGE_KEY_CANTEENS, JSON.stringify(canteens));
 
     // Write to Firebase (non-blocking, may fail silently if not configured)
-    try {
-      await set(ref(db, `canteens/${newCanteen.id}`), newCanteen);
-    } catch (err) {
-      console.warn('Firebase write failed, using localStorage only:', err);
+    if (db) {
+      try {
+        await set(ref(db, `canteens/${newCanteen.id}`), newCanteen);
+      } catch (err) {
+        console.warn('Firebase write failed, using localStorage only:', err);
+      }
     }
 
     return newCanteen;
@@ -199,7 +201,7 @@ export const BackendService = {
     // Save to localStorage first
     tokens.push(newToken);
     localStorage.setItem(STORAGE_KEY_TOKENS, JSON.stringify(tokens));
-    
+
     // Notify listeners of change
     notifyChange();
 
@@ -211,7 +213,7 @@ export const BackendService = {
         console.warn('Firebase write failed for token, using localStorage:', err);
       }
     }
-    
+
     return newToken;
   },
 
@@ -248,7 +250,7 @@ export const BackendService = {
     // Save to localStorage first
     tokens.push(newToken);
     localStorage.setItem(STORAGE_KEY_TOKENS, JSON.stringify(tokens));
-    
+
     // Notify listeners of change
     notifyChange();
 
@@ -260,7 +262,7 @@ export const BackendService = {
         console.warn('Firebase write failed for online order, using localStorage:', err);
       }
     }
-    
+
     return newToken;
   },
 
@@ -272,7 +274,7 @@ export const BackendService = {
   getQueuePosition: async (canteenId: string, tokenId: string, queueType?: QueueType): Promise<number> => {
     const tokens: Token[] = JSON.parse(localStorage.getItem(STORAGE_KEY_TOKENS) || '[]');
     let activeTokens;
-    
+
     if (queueType) {
       activeTokens = tokens.filter(
         t => t.canteenId === canteenId && t.status === OrderStatus.WAITING && t.queueType === queueType
@@ -280,7 +282,7 @@ export const BackendService = {
     } else {
       activeTokens = tokens.filter(t => t.canteenId === canteenId && t.status === OrderStatus.WAITING);
     }
-    
+
     const index = activeTokens.findIndex(t => t.id === tokenId);
     return index === -1 ? 0 : index + 1;
   },
@@ -335,7 +337,7 @@ export const BackendService = {
       localStorage.setItem(STORAGE_KEY_TOKENS, JSON.stringify(tokens));
       notifyChange();
     }
-    
+
     if (db) {
       try {
         await update(ref(db, `tokens/${tokenId}`), { status: OrderStatus.READY });
@@ -354,7 +356,7 @@ export const BackendService = {
       localStorage.setItem(STORAGE_KEY_TOKENS, JSON.stringify(tokens));
       notifyChange();
     }
-    
+
     if (db) {
       try {
         await update(ref(db, `tokens/${tokenId}`), {
@@ -426,7 +428,10 @@ export const BackendService = {
   updateTokenEstimation: async (tokenId: string, minutes: number, reasoning?: string) => {
     const updates: any = { estimatedWaitTimeMinutes: minutes };
     if (reasoning) updates.aiReasoning = reasoning;
-    await update(ref(db, `tokens/${tokenId}`), updates);
+
+    if (db) {
+      await update(ref(db, `tokens/${tokenId}`), updates);
+    }
   },
 
   recordOrderHistory: async (tokenId: string, foodItem: string, prepTimeMinutes: number, hour: number) => {
@@ -437,7 +442,9 @@ export const BackendService = {
       hour,
       timestamp: Date.now()
     };
-    await push(ref(db, 'history'), newEntry);
+    if (db) {
+      await push(ref(db, 'history'), newEntry);
+    }
   },
 
   getHistoricalDataForFood: async (foodItem: string): Promise<any[]> => {
@@ -452,17 +459,17 @@ export const BackendService = {
   getTodaysOrderSummary: async (canteenId: string): Promise<{ foodItem: string, count: number, totalPrepTime: number }[]> => {
     const tokens: Token[] = JSON.parse(localStorage.getItem(STORAGE_KEY_TOKENS) || '[]');
     const today = new Date().setHours(0, 0, 0, 0);
-    
+
     // Get all completed orders for this canteen today
-    const todayTokens = tokens.filter(t => 
-      t.canteenId === canteenId && 
-      t.timestamp >= today && 
+    const todayTokens = tokens.filter(t =>
+      t.canteenId === canteenId &&
+      t.timestamp >= today &&
       t.status === OrderStatus.COMPLETED
     );
 
     // Aggregate by food item
     const foodSummary: Record<string, { count: number, totalPrepTime: number }> = {};
-    
+
     todayTokens.forEach(token => {
       if (!foodSummary[token.foodItem]) {
         foodSummary[token.foodItem] = { count: 0, totalPrepTime: 0 };
@@ -529,10 +536,10 @@ export const RazorpayBackend = {
     try {
       // Determine API endpoint based on environment
       const isProduction = window.location.hostname !== 'localhost';
-      const apiUrl = isProduction 
+      const apiUrl = isProduction
         ? '/api/create-order'  // Vercel API route
         : 'http://localhost:3000/api/create-order';  // Local backend
-      
+
       const response = await fetch(apiUrl, {
         method: 'POST',
         headers: {
@@ -572,7 +579,7 @@ export const initializeDemoData = async () => {
   // Step 1: Keep only VITFC canteen
   const canteens: Canteen[] = JSON.parse(localStorage.getItem(STORAGE_KEY_CANTEENS) || '[]');
   const vitfc = canteens.find(c => c.name === 'VITFC');
-  
+
   if (!vitfc) {
     console.error('VITFC canteen not found');
     return;
@@ -585,16 +592,16 @@ export const initializeDemoData = async () => {
   const today = new Date();
   today.setHours(0, 0, 0, 0);
   const todayStart = today.getTime();
-  
+
   // Spread 400 orders across 12 hours (8 AM to 8 PM)
   const tokens: Token[] = [];
   const foodItems = ['vadapav', 'alooparatha', 'samosa', 'masaladosa', 'cholebhature', 'sandwich', 'coffee'];
-  
+
   for (let i = 0; i < 400; i++) {
     // Spread orders across 12 hours (43200000 ms)
     const timeOffset = (i / 400) * 12 * 60 * 60 * 1000;
     const timestamp = todayStart + 8 * 60 * 60 * 1000 + timeOffset; // Start from 8 AM
-    
+
     const newToken: Token = {
       id: generateId(),
       canteenId: vitfc.id,
@@ -612,6 +619,6 @@ export const initializeDemoData = async () => {
 
   localStorage.setItem(STORAGE_KEY_TOKENS, JSON.stringify(tokens));
   notifyChange();
-  
+
   console.log('Demo data initialized: 400 completed orders for VITFC');
 };
