@@ -9,8 +9,7 @@ const firebaseConfig = {
     messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID || 'dummy',
     appId: import.meta.env.VITE_FIREBASE_APP_ID || 'dummy:web:dummy',
     measurementId: import.meta.env.VITE_FIREBASE_MEASUREMENT_ID || 'dummy',
-    // IMPORTANT: Leave databaseURL empty - we'll use localStorage as primary storage
-    databaseURL: ''
+    databaseURL: import.meta.env.VITE_FIREBASE_DATABASE_URL || ''
 };
 
 let app: any;
@@ -20,7 +19,7 @@ try {
     app = initializeApp(firebaseConfig);
     // Only try to get database if a real databaseURL is configured
     const dbUrl = import.meta.env.VITE_FIREBASE_DATABASE_URL;
-    if (dbUrl && dbUrl.includes('firebaseio.com')) {
+    if (dbUrl && (dbUrl.includes('firebaseio.com') || dbUrl.includes('firebasedatabase.app'))) {
         try {
             db = getDatabase(app);
         } catch (err) {
